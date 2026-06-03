@@ -35,7 +35,8 @@ export default defineConfig(({ mode }) => {
     ],
     // Read base path from env var (matches RCS_WEB_BASE at runtime).
     // Supports relative paths ('/code/') for same-origin and full URLs ('https://cdn.example.com/code/') for CDN.
-    base: env.RCS_WEB_BASE || '/code/',
+    // loadEnv() reads .env files only; process.env is checked as fallback for Docker ARG/ENV builds.
+    base: env.RCS_WEB_BASE || process.env.RCS_WEB_BASE || '/code/',
     resolve: {
       alias: {
         '@/src': path.resolve(__dirname, 'src'),
