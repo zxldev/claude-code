@@ -5,7 +5,8 @@ import type {
   SessionEvent,
 } from '../types'
 
-const BASE = ''
+/** API base URL — empty for same-origin, or full URL for CDN deployment (injected by Vite) */
+const BASE: string = __RCS_API_BASE__
 
 /** Active access token for Authorization header (set by auth context) */
 let _accessToken: string | null = null

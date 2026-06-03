@@ -29,7 +29,7 @@ class SSEEventBus {
     this.disconnect()
     const uuid = getUserId()
     const token = getAccessToken()
-    let url = `/web/sessions/${sessionId}/events?uuid=${encodeURIComponent(uuid ?? '')}`
+    let url = `${__RCS_API_BASE__}/web/sessions/${sessionId}/events?uuid=${encodeURIComponent(uuid ?? '')}`
     if (token) {
       url += `&access_token=${encodeURIComponent(token)}`
     }
@@ -122,7 +122,7 @@ export class RCSTransport implements ChatTransport<UIMessage> {
     }
     if (token) headers['Authorization'] = `Bearer ${token}`
     const response = await fetch(
-      `/web/sessions/${this.sessionId}/events?uuid=${encodeURIComponent(uuid ?? '')}`,
+      `${__RCS_API_BASE__}/web/sessions/${this.sessionId}/events?uuid=${encodeURIComponent(uuid ?? '')}`,
       {
         method: 'POST',
         headers,

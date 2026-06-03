@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { compress } from 'hono/compress'
 import { logger } from 'hono/logger'
 import { serveStatic } from 'hono/bun'
 import { config } from './config'
@@ -34,6 +35,7 @@ const app = new Hono()
 
 // Middleware
 app.use('*', logger())
+app.use('*', compress())
 app.use('*', async (c, next) => {
   // Normalize double slashes in path (e.g. //v1/environments/bridge → /v1/environments/bridge)
   const path = new URL(c.req.url).pathname
@@ -50,7 +52,7 @@ app.use('/web/*', cors(webCorsOptions))
 // Health check
 app.get('/health', c => c.json({ status: 'ok', version: config.version }))
 
-// Static files — serve built web UI under /code path
+// Static files — serve built web UI
 // Uses web/dist/ if it exists (production), otherwise falls back to web/ (dev/fallback)
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const distDir = resolve(__dirname, '../web/dist')
@@ -58,19 +60,36 @@ const webDir = existsSync(resolve(distDir, 'index.html'))
   ? distDir
   : resolve(__dirname, '../web')
 
-const stripCodePrefix = (p: string) => p.replace(/^\/code/, '')
+// webBase is the Vite base path (e.g. '/code/' or '/rcs/').
+// For same-origin serving, strip the base prefix to map to the dist directory.
+// For CDN deployment (full URL base), only SPA fallback routes are needed.
+const webBase = config.webBase
+const isCdnBase = webBase.startsWith('http')
+const webBasePath = isCdnBase
+  ? new URL(webBase).pathname.replace(/\/$/, '')
+  : webBase.replace(/\/$/, '')
 
-// Serve all static files under /code/* from web/ directory
-app.use(
-  '/code/*',
-  serveStatic({ root: webDir, rewriteRequestPath: stripCodePrefix }),
+if (!isCdnBase) {
+  const stripWebBasePrefix = (p: string) =>
+    p.replace(new RegExp(`^${webBasePath}`), '')
+  // Serve static files under webBase path
+  app.use(
+    `${webBasePath}/*`,
+    serveStatic({ root: webDir, rewriteRequestPath: stripWebBasePrefix }),
+  )
+}
+
+// SPA fallback — serve index.html for all webBase routes (must come after static middleware)
+app.get(webBasePath || '/', serveStatic({ root: webDir, path: 'index.html' }))
+app.get(`${webBasePath}/`, serveStatic({ root: webDir, path: 'index.html' }))
+app.get(
+  `${webBasePath}/:sessionId`,
+  serveStatic({ root: webDir, path: 'index.html' }),
 )
-// /code, /code/, and /code/:sessionId — SPA fallback
-app.get('/code', serveStatic({ root: webDir, path: 'index.html' }))
-app.get('/code/', serveStatic({ root: webDir, path: 'index.html' }))
-app.get('/code/:sessionId', serveStatic({ root: webDir, path: 'index.html' }))
-// /code/auth/* — OIDC callback SPA fallback
-app.get('/code/auth/*', serveStatic({ root: webDir, path: 'index.html' }))
+app.get(
+  `${webBasePath}/auth/*`,
+  serveStatic({ root: webDir, path: 'index.html' }),
+)
 
 // v1 Environment routes
 app.route('/v1/environments', v1Environments)

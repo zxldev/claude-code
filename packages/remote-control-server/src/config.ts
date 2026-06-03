@@ -4,6 +4,8 @@ export const config = {
   host: process.env.RCS_HOST || '0.0.0.0',
   apiKeys: (process.env.RCS_API_KEYS || '').split(',').filter(Boolean),
   baseUrl: process.env.RCS_BASE_URL || '',
+  /** Web UI base path (Vite base). Defaults to '/code/'. Set to CDN URL for CDN deployment. */
+  webBase: process.env.RCS_WEB_BASE || '/code/',
   pollTimeout: parseInt(process.env.RCS_POLL_TIMEOUT || '8', 10),
   heartbeatInterval: parseInt(process.env.RCS_HEARTBEAT_INTERVAL || '20', 10),
   jwtExpiresIn: parseInt(process.env.RCS_JWT_EXPIRES_IN || '3600', 10),
