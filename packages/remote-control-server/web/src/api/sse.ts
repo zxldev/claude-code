@@ -12,7 +12,7 @@ export function connectSSE(
 
   const uuid = getUserId()
   const token = getAccessToken()
-  let url = `${__RCS_API_BASE__}/web/sessions/${sessionId}/events?uuid=${encodeURIComponent(uuid ?? '')}`
+  let url = `/web/sessions/${sessionId}/events?uuid=${encodeURIComponent(uuid ?? '')}`
   if (token) {
     url += `&access_token=${encodeURIComponent(token)}`
   }

@@ -36,10 +36,6 @@ export default defineConfig(({ mode }) => {
     // Read base path from env var (matches RCS_WEB_BASE at runtime).
     // Supports relative paths ('/code/') for same-origin and full URLs ('https://cdn.example.com/code/') for CDN.
     base: env.RCS_WEB_BASE || '/code/',
-    // Inject RCS_API_BASE for CDN deployments so API requests go to the RCS server, not the CDN
-    define: {
-      __RCS_API_BASE__: JSON.stringify(env.RCS_BASE_URL || ''),
-    },
     resolve: {
       alias: {
         '@/src': path.resolve(__dirname, 'src'),

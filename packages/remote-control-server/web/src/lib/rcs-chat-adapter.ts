@@ -37,7 +37,7 @@ class SSEBus {
     this.disconnect()
     const uuid = getUserId()
     const uuidParam = uuid ? `?uuid=${encodeURIComponent(uuid)}` : ''
-    const url = `${__RCS_API_BASE__}/web/sessions/${sessionId}/events${uuidParam}`
+    const url = `/web/sessions/${sessionId}/events${uuidParam}`
     const es = new EventSource(url)
     this.eventSource = es
 

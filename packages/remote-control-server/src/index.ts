@@ -60,34 +60,35 @@ const webDir = existsSync(resolve(distDir, 'index.html'))
   ? distDir
   : resolve(__dirname, '../web')
 
-// webBase is the Vite base path (e.g. '/code/' or '/rcs/').
-// For same-origin serving, strip the base prefix to map to the dist directory.
-// For CDN deployment (full URL base), only SPA fallback routes are needed.
+// webBase is the Vite base path (e.g. '/code/' or 'https://cdn.example.com/code/').
+// webRoute is the server-side route path (always a relative path like '/code/').
+// For CDN deployment, webBase is a full URL but webRoute stays as the path the browser uses.
 const webBase = config.webBase
+const webRoute = config.webRoute
 const isCdnBase = webBase.startsWith('http')
-const webBasePath = isCdnBase
-  ? new URL(webBase).pathname.replace(/\/$/, '')
-  : webBase.replace(/\/$/, '')
+const webRoutePath = webRoute.replace(/\/$/, '')
 
 if (!isCdnBase) {
-  const stripWebBasePrefix = (p: string) =>
-    p.replace(new RegExp(`^${webBasePath}`), '')
-  // Serve static files under webBase path
+  const stripWebRoutePrefix = (p: string) =>
+    p.replace(new RegExp(`^${webRoutePath}`), '')
+  // Serve static files under webRoute path
   app.use(
-    `${webBasePath}/*`,
-    serveStatic({ root: webDir, rewriteRequestPath: stripWebBasePrefix }),
+    `${webRoutePath}/*`,
+    serveStatic({ root: webDir, rewriteRequestPath: stripWebRoutePrefix }),
   )
 }
 
-// SPA fallback — serve index.html for all webBase routes (must come after static middleware)
-app.get(webBasePath || '/', serveStatic({ root: webDir, path: 'index.html' }))
-app.get(`${webBasePath}/`, serveStatic({ root: webDir, path: 'index.html' }))
+// SPA fallback — serve index.html for all webRoute routes (must come after static middleware)
+// Always needed, even in CDN mode: the browser loads index.html from the RCS server,
+// then JS/CSS assets are fetched from CDN per the Vite base config.
+app.get(webRoutePath || '/', serveStatic({ root: webDir, path: 'index.html' }))
+app.get(`${webRoutePath}/`, serveStatic({ root: webDir, path: 'index.html' }))
 app.get(
-  `${webBasePath}/:sessionId`,
+  `${webRoutePath}/:sessionId`,
   serveStatic({ root: webDir, path: 'index.html' }),
 )
 app.get(
-  `${webBasePath}/auth/*`,
+  `${webRoutePath}/auth/*`,
   serveStatic({ root: webDir, path: 'index.html' }),
 )
 

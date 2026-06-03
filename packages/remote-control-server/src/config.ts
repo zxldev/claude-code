@@ -6,6 +6,8 @@ export const config = {
   baseUrl: process.env.RCS_BASE_URL || '',
   /** Web UI base path (Vite base). Defaults to '/code/'. Set to CDN URL for CDN deployment. */
   webBase: process.env.RCS_WEB_BASE || '/code/',
+  /** Server-side route path for the Web UI SPA. Defaults to '/code/'. */
+  webRoute: process.env.RCS_WEB_ROUTE || '/code/',
   pollTimeout: parseInt(process.env.RCS_POLL_TIMEOUT || '8', 10),
   heartbeatInterval: parseInt(process.env.RCS_HEARTBEAT_INTERVAL || '20', 10),
   jwtExpiresIn: parseInt(process.env.RCS_JWT_EXPIRES_IN || '3600', 10),

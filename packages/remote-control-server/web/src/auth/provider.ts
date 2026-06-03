@@ -25,7 +25,7 @@ export interface AuthConfig {
 
 export async function fetchAuthConfig(): Promise<AuthConfig> {
   if (_authConfig) return _authConfig
-  const res = await fetch(`${__RCS_API_BASE__}/web/auth/config`)
+  const res = await fetch('/web/auth/config')
   _authConfig = await res.json()
   return _authConfig
 }

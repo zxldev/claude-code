@@ -15,18 +15,14 @@ app.get('/config', c => {
   }
 
   const baseUrl = config.baseUrl || `http://localhost:${config.port}`
-  // OIDC redirect_uri and post_logout_redirect_uri must point to the RCS server,
-  // not the CDN. Extract the path portion from webBase for the route prefix.
-  const webBase = config.webBase
-  const webBasePath = webBase.startsWith('http')
-    ? new URL(webBase).pathname.replace(/\/$/, '')
-    : webBase.replace(/\/$/, '')
+  // OIDC redirect_uri must point to the RCS server, using the server-side route path
+  const webRoutePath = config.webRoute.replace(/\/$/, '')
   return c.json({
     mode: 'oidc',
     authority: config.oidc.issuer,
     client_id: config.oidc.clientId,
-    redirect_uri: `${baseUrl}${webBasePath}/auth/callback`,
-    post_logout_redirect_uri: `${baseUrl}${webBasePath}/`,
+    redirect_uri: `${baseUrl}${webRoutePath}/auth/callback`,
+    post_logout_redirect_uri: `${baseUrl}${webRoutePath}/`,
     scope: config.oidc.scopes.join(' '),
     audience: config.oidc.audience || undefined,
   })
