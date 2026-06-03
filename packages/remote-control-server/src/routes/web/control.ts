@@ -1,6 +1,6 @@
 import { log, error as logError } from '../../logger'
 import { Hono } from 'hono'
-import { uuidAuth } from '../../auth/middleware'
+import { oidcAuth } from '../../auth/middleware'
 import {
   getSession,
   isSessionClosedStatus,
@@ -26,7 +26,8 @@ function checkOwnership(
   sessionId: string,
 ): OwnershipCheckResult {
   const uuid = c.get('uuid')!
-  const resolvedSessionId = resolveOwnedWebSessionId(sessionId, uuid)
+  const autoClaim = !!c.get('oidcClaims')
+  const resolvedSessionId = resolveOwnedWebSessionId(sessionId, uuid, autoClaim)
   if (!resolvedSessionId) {
     return { error: true }
   }
@@ -45,7 +46,7 @@ function closedSessionResponse(message: string) {
 }
 
 /** POST /web/sessions/:id/events — Send user message to session */
-app.post('/sessions/:id/events', uuidAuth, async c => {
+app.post('/sessions/:id/events', oidcAuth, async c => {
   const requestedSessionId = c.req.param('id')!
   const ownership = checkOwnership(c, requestedSessionId)
   if (ownership.error) {
@@ -74,7 +75,7 @@ app.post('/sessions/:id/events', uuidAuth, async c => {
 })
 
 /** POST /web/sessions/:id/control — Send control request (permission approval etc) */
-app.post('/sessions/:id/control', uuidAuth, async c => {
+app.post('/sessions/:id/control', oidcAuth, async c => {
   const requestedSessionId = c.req.param('id')!
   const ownership = checkOwnership(c, requestedSessionId)
   if (ownership.error) {
@@ -101,7 +102,7 @@ app.post('/sessions/:id/control', uuidAuth, async c => {
 })
 
 /** POST /web/sessions/:id/interrupt — Interrupt session */
-app.post('/sessions/:id/interrupt', uuidAuth, async c => {
+app.post('/sessions/:id/interrupt', oidcAuth, async c => {
   const requestedSessionId = c.req.param('id')!
   const ownership = checkOwnership(c, requestedSessionId)
   if (ownership.error) {

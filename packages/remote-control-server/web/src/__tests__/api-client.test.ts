@@ -1,27 +1,4 @@
-import { describe, test, expect, mock, beforeEach } from 'bun:test'
-
-// In-memory localStorage mock
-let store: Record<string, string> = {}
-
-beforeEach(() => {
-  store = {}
-  ;(globalThis as any).localStorage = {
-    getItem: (k: string) => store[k] ?? null,
-    setItem: (k: string, v: string) => {
-      store[k] = v
-    },
-    removeItem: (k: string) => {
-      delete store[k]
-    },
-    clear: () => {
-      store = {}
-    },
-    get length() {
-      return Object.keys(store).length
-    },
-    key: () => null,
-  }
-})
+import { describe, test, expect, beforeEach } from 'bun:test'
 
 // Mock fetch
 const fetchMock = {
@@ -36,7 +13,8 @@ beforeEach(() => {
   fetchMock.lastOpts = {}
   fetchMock.response = { ok: true, status: 200, statusText: 'OK' }
   fetchMock.responseData = {}
-  client.setActiveApiToken(null)
+  client.setAccessToken(null)
+  client.setUserId(null)
 })
 
 ;(globalThis as any).fetch = async (url: string, opts: RequestInit) => {
@@ -50,50 +28,34 @@ beforeEach(() => {
   } as Response
 }
 
-const { getUuid, setUuid } = await import('../api/client')
-
-// Import api* functions - they depend on getUuid and fetch
 const client = await import('../api/client')
 const relayClient = await import('../acp/relay-client')
 
 // =============================================================================
-// getUuid()
+// setUserId() / getUserId()
 // =============================================================================
 
-describe('getUuid', () => {
-  test('returns existing UUID from localStorage', () => {
-    store['rcs_uuid'] = 'existing-uuid'
-    expect(getUuid()).toBe('existing-uuid')
+describe('setUserId / getUserId', () => {
+  test('getUserId returns null by default', () => {
+    client.setUserId(null)
+    expect(client.getUserId()).toBeNull()
   })
 
-  test('generates and stores new UUID when none exists', () => {
-    const uuid = getUuid()
-    expect(uuid).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-    )
-    expect(store['rcs_uuid']).toBe(uuid)
-  })
-
-  test('returns same UUID on subsequent calls', () => {
-    const a = getUuid()
-    const b = getUuid()
-    expect(a).toBe(b)
+  test('setUserId stores and getUserId retrieves', () => {
+    client.setUserId('user-123')
+    expect(client.getUserId()).toBe('user-123')
   })
 })
 
-// =============================================================================
-// setUuid()
-// =============================================================================
-
-describe('setUuid', () => {
-  test('writes UUID to localStorage', () => {
-    setUuid('custom-uuid-999')
-    expect(store['rcs_uuid']).toBe('custom-uuid-999')
+describe('setAccessToken / getAccessToken', () => {
+  test('getAccessToken returns null by default', () => {
+    client.setAccessToken(null)
+    expect(client.getAccessToken()).toBeNull()
   })
 
-  test('getUuid returns the set UUID', () => {
-    setUuid('my-uuid')
-    expect(getUuid()).toBe('my-uuid')
+  test('setAccessToken stores and getAccessToken retrieves', () => {
+    client.setAccessToken('my-jwt-token')
+    expect(client.getAccessToken()).toBe('my-jwt-token')
   })
 })
 
@@ -102,23 +64,23 @@ describe('setUuid', () => {
 // =============================================================================
 
 describe('api functions', () => {
-  test('GET request appends uuid to URL', async () => {
-    store['rcs_uuid'] = 'test-uuid'
+  test('GET request appends userId as uuid param', async () => {
+    client.setUserId('test-user')
     fetchMock.responseData = []
     await client.apiFetchSessions()
-    expect(fetchMock.lastUrl).toContain('uuid=test-uuid')
+    expect(fetchMock.lastUrl).toContain('uuid=test-user')
     expect(fetchMock.lastOpts.method).toBe('GET')
   })
 
   test('GET request uses ? for URL without existing query params', async () => {
-    store['rcs_uuid'] = 'test-uuid'
+    client.setUserId('test-user')
     fetchMock.responseData = []
     await client.apiFetchSessions()
     expect(fetchMock.lastUrl).toContain('?uuid=')
   })
 
   test('GET request uses & for URL with existing query params', async () => {
-    store['rcs_uuid'] = 'test-uuid'
+    client.setUserId('test-user')
     fetchMock.responseData = []
     await client.apiFetchAllSessions()
     // apiFetchAllSessions calls GET /web/sessions/all
@@ -126,7 +88,7 @@ describe('api functions', () => {
   })
 
   test('POST request includes JSON body', async () => {
-    store['rcs_uuid'] = 'test-uuid'
+    client.setUserId('test-user')
     fetchMock.responseData = {}
     await client.apiBind('sess-1')
     expect(fetchMock.lastOpts.method).toBe('POST')
@@ -138,32 +100,44 @@ describe('api functions', () => {
     })
   })
 
-  test('active API token is sent only in Authorization header', async () => {
-    store['rcs_uuid'] = 'browser-uuid'
+  test('access token is sent in Authorization header', async () => {
+    client.setUserId('browser-user')
+    client.setAccessToken('oidc-access-token')
     fetchMock.responseData = []
-    client.setActiveApiToken('secret-token')
 
     await client.apiFetchSessions()
 
-    expect(fetchMock.lastUrl).toContain('uuid=browser-uuid')
-    expect(fetchMock.lastUrl).not.toContain('secret-token')
+    expect(fetchMock.lastUrl).toContain('uuid=browser-user')
+    expect(fetchMock.lastUrl).not.toContain('oidc-access-token')
     expect(fetchMock.lastOpts.headers).toEqual({
       'Content-Type': 'application/json',
-      Authorization: 'Bearer secret-token',
+      Authorization: 'Bearer oidc-access-token',
+    })
+  })
+
+  test('no Authorization header when accessToken is null', async () => {
+    client.setUserId('test-user')
+    client.setAccessToken(null)
+    fetchMock.responseData = []
+
+    await client.apiFetchSessions()
+
+    expect(fetchMock.lastOpts.headers).toEqual({
+      'Content-Type': 'application/json',
     })
   })
 
   test('throws error on non-ok response', async () => {
-    store['rcs_uuid'] = 'test-uuid'
+    client.setUserId('test-user')
     fetchMock.response = { ok: false, status: 401, statusText: 'Unauthorized' }
     fetchMock.responseData = {
-      error: { type: 'auth', message: 'Invalid UUID' },
+      error: { type: 'auth', message: 'Invalid token' },
     }
-    await expect(client.apiFetchSessions()).rejects.toThrow('Invalid UUID')
+    await expect(client.apiFetchSessions()).rejects.toThrow('Invalid token')
   })
 
   test('throws with statusText when error message is missing', async () => {
-    store['rcs_uuid'] = 'test-uuid'
+    client.setUserId('test-user')
     fetchMock.response = {
       ok: false,
       status: 500,

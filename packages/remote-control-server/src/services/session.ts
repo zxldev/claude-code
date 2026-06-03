@@ -127,6 +127,7 @@ export function resolveExistingWebSessionId(sessionId: string): string | null {
 export function resolveOwnedWebSessionId(
   sessionId: string,
   uuid: string,
+  autoClaim?: boolean,
 ): string | null {
   if (storeIsSessionOwner(sessionId, uuid)) {
     return sessionId
@@ -145,6 +146,12 @@ export function resolveOwnedWebSessionId(
   if (existingId) {
     const owners = storeGetSessionOwners(existingId)
     if (!owners || owners.size === 0) {
+      storeBindSession(existingId, uuid)
+      return existingId
+    }
+    // Auto-claim for OIDC users: if the user has a valid OIDC identity
+    // and knows the session ID, grant access by binding them as an owner
+    if (autoClaim) {
       storeBindSession(existingId, uuid)
       return existingId
     }

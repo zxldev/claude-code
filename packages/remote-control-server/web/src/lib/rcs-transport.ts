@@ -1,5 +1,5 @@
 import type { ChatTransport, UIMessage, UIMessageChunk } from 'ai'
-import { getUuid } from '../api/client'
+import { getUserId, getAccessToken } from '../api/client'
 import { generateMessageUuid } from './utils'
 import type { SessionEvent, EventPayload } from '../types'
 
@@ -27,8 +27,12 @@ class SSEEventBus {
   /** Connect to the SSE stream for a session */
   connect(sessionId: string): void {
     this.disconnect()
-    const uuid = getUuid()
-    const url = `/web/sessions/${sessionId}/events?uuid=${encodeURIComponent(uuid)}`
+    const uuid = getUserId()
+    const token = getAccessToken()
+    let url = `/web/sessions/${sessionId}/events?uuid=${encodeURIComponent(uuid ?? '')}`
+    if (token) {
+      url += `&access_token=${encodeURIComponent(token)}`
+    }
     const es = new EventSource(url)
     this.eventSource = es
 
@@ -111,12 +115,17 @@ export class RCSTransport implements ChatTransport<UIMessage> {
     }
 
     // POST user message to the RCS backend
-    const uuid = getUuid()
+    const uuid = getUserId()
+    const token = getAccessToken()
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    if (token) headers['Authorization'] = `Bearer ${token}`
     const response = await fetch(
-      `/web/sessions/${this.sessionId}/events?uuid=${encodeURIComponent(uuid)}`,
+      `/web/sessions/${this.sessionId}/events?uuid=${encodeURIComponent(uuid ?? '')}`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           type: 'user',
           uuid: generateMessageUuid(),

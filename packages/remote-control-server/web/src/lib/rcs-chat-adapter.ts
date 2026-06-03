@@ -6,7 +6,7 @@ import {
   apiSendEvent,
   apiSendControl,
   apiInterrupt,
-  getUuid,
+  getUserId,
 } from '../api/client'
 import { generateMessageUuid } from './utils'
 import type { SessionEvent, EventPayload } from '../types'
@@ -35,8 +35,9 @@ class SSEBus {
 
   connect(sessionId: string): void {
     this.disconnect()
-    const uuid = getUuid()
-    const url = `/web/sessions/${sessionId}/events?uuid=${encodeURIComponent(uuid)}`
+    const uuid = getUserId()
+    const uuidParam = uuid ? `?uuid=${encodeURIComponent(uuid)}` : ''
+    const url = `/web/sessions/${sessionId}/events${uuidParam}`
     const es = new EventSource(url)
     this.eventSource = es
 

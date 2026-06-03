@@ -1,7 +1,9 @@
 import type { Context, Next } from 'hono'
 import { validateApiKey } from './api-key'
 import { verifyWorkerJwt } from './jwt'
+import { verifyOidcJwt, getDisplayName, type OidcClaims } from './oidc-jwt'
 import { resolveToken } from './token'
+import { isOidcConfigured } from '../config'
 
 const WS_AUTH_PROTOCOL_PREFIX = 'rcs.auth.'
 
@@ -146,35 +148,68 @@ export async function acceptCliHeaders(c: Context, next: Next) {
 }
 
 /**
- * Extract UUID from request — query param ?uuid= or header X-UUID
+ * OIDC JWT authentication for Web UI routes.
+ *
+ * Supports:
+ * 1. OIDC JWT Bearer token — verified against provider JWKS → injects oidcClaims
+ * 2. OIDC JWT via access_token query param — for SSE/EventSource connections that can't send headers
+ * 3. Legacy UUID fallback — when OIDC is not configured, falls back to UUID auth
+ * 4. API key — for CLI/programmatic access to web routes
  */
-export function getUuidFromRequest(c: Context): string | undefined {
-  return c.req.query('uuid') || c.req.header('X-UUID')
-}
-
-/**
- * UUID-based auth for Web UI routes (no-login mode).
- * Accepts UUID in query param/header, OR a valid API key via Authorization header.
- */
-export async function uuidAuth(c: Context, next: Next) {
-  // Try API key auth via Authorization header
+export async function oidcAuth(c: Context, next: Next) {
   const bearer = extractBearerToken(c)
+  // Also accept access_token query param for SSE connections (EventSource can't send headers)
+  const queryToken = c.req.query('access_token')
+  const tokenToVerify = bearer || queryToken
+
+  // Try API key auth via Authorization header (CLI/programmatic)
   if (bearer && validateApiKey(bearer)) {
-    // Valid API key — generate a stable UUID from the key for downstream use
-    const uuid = getUuidFromRequest(c)
-    c.set('uuid', uuid || bearer)
+    const uuid = c.req.query('uuid') || c.req.header('X-UUID') || bearer
+    c.set('uuid', uuid)
     await next()
     return
   }
 
-  // Fall back to UUID auth
-  const uuid = getUuidFromRequest(c)
-  if (!uuid) {
-    return c.json(
-      { error: { type: 'unauthorized', message: 'Missing UUID' } },
-      401,
-    )
+  // Try OIDC JWT verification (from Authorization header or access_token query param)
+  if (tokenToVerify && isOidcConfigured()) {
+    const claims = await verifyOidcJwt(tokenToVerify)
+    if (claims) {
+      c.set('oidcClaims', claims)
+      c.set('uuid', claims.sub)
+      c.set('displayName', getDisplayName(claims))
+      await next()
+      return
+    }
   }
-  c.set('uuid', uuid)
-  await next()
+
+  // Fall back to UUID auth (backward compatible when OIDC not configured)
+  const uuid = c.req.query('uuid') || c.req.header('X-UUID')
+  if (uuid) {
+    c.set('uuid', uuid)
+    await next()
+    return
+  }
+
+  return c.json(
+    {
+      error: {
+        type: 'unauthorized',
+        message: 'Missing or invalid authentication',
+      },
+    },
+    401,
+  )
+}
+
+/** Get display name from context (OIDC claims or UUID fallback) */
+export function getAuthDisplayName(c: Context): string {
+  return c.get('displayName') || c.get('uuid') || 'Unknown'
+}
+
+/** Type augmentation for Hono context variables */
+declare module 'hono' {
+  interface ContextVariableMap {
+    oidcClaims?: OidcClaims
+    displayName?: string
+  }
 }

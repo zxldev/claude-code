@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
 import QRCode from 'qrcode';
 import QrScanner from 'qr-scanner';
-import { getUuid, setUuid } from '../api/client';
+import { useAuth } from '../auth/context';
 import { cn } from '../lib/utils';
-import { Scan } from 'lucide-react';
+import { Scan, LogOut } from 'lucide-react';
 import { useTheme } from '../lib/theme';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import { useState, useRef, useEffect } from 'react';
 
 interface IdentityPanelProps {
   open: boolean;
@@ -13,12 +13,12 @@ interface IdentityPanelProps {
 }
 
 export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
+  const auth = useAuth();
   const [copied, setCopied] = useState(false);
   const [scanning, setScanning] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const scannerRef = useRef<QrScanner | null>(null);
-  const uuid = getUuid();
   const { resolvedTheme } = useTheme();
 
   const qrColors =
@@ -26,10 +26,9 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
 
   useEffect(() => {
     if (!open) return;
-    // Defer one frame so Radix Dialog Portal has finished mounting the canvas
     const rafId = requestAnimationFrame(() => {
       if (!canvasRef.current) return;
-      const qrUrl = `${window.location.origin}/code?uuid=${encodeURIComponent(uuid)}`;
+      const qrUrl = `${window.location.origin}/code?uuid=${encodeURIComponent(auth.userId)}`;
       QRCode.toCanvas(canvasRef.current, qrUrl, {
         width: 200,
         margin: 1,
@@ -39,7 +38,7 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
       });
     });
     return () => cancelAnimationFrame(rafId);
-  }, [open, uuid, resolvedTheme]);
+  }, [open, auth.userId, resolvedTheme]);
 
   // Cleanup scanner on close
   useEffect(() => {
@@ -54,7 +53,7 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
   if (!open) return null;
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(uuid);
+    await navigator.clipboard.writeText(auth.userId);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -89,10 +88,8 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
 
   const handleScannedData = (data: string) => {
     try {
-      // Try ACP format: { url, token }
       const parsed = JSON.parse(data);
       if (parsed.url && parsed.token) {
-        // Store ACP connection data and navigate to ACP direct connect view
         stopCamera();
         onClose();
         sessionStorage.setItem('acp_connection', JSON.stringify({ url: parsed.url, token: parsed.token }));
@@ -101,28 +98,6 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
       }
     } catch {
       // Not JSON
-    }
-
-    // Try URL with uuid param
-    try {
-      const url = new URL(data);
-      const importedUuid = url.searchParams.get('uuid');
-      if (importedUuid) {
-        setUuid(importedUuid);
-        stopCamera();
-        onClose();
-        return;
-      }
-    } catch {
-      // Not a URL
-    }
-
-    // Raw UUID string
-    if (data.length >= 32) {
-      setUuid(data);
-      stopCamera();
-      onClose();
-      return;
     }
   };
 
@@ -154,24 +129,51 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
     >
       <DialogContent className="max-w-sm rounded-2xl border-border bg-surface-1 p-6 shadow-2xl">
         <DialogHeader>
-          <DialogTitle className="font-display text-lg font-semibold text-text-primary">Identity</DialogTitle>
+          <DialogTitle className="font-display text-lg font-semibold text-text-primary">
+            {auth.mode === 'oidc' ? 'Profile' : 'Identity'}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* UUID */}
+          {/* User info */}
           <div>
-            <label className="mb-1 block text-sm text-text-secondary">Your UUID</label>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 truncate rounded-lg bg-surface-2 px-3 py-2 font-mono text-xs text-text-primary">
-                {uuid}
-              </code>
-              <button
-                onClick={handleCopy}
-                className="rounded-lg border border-border px-3 py-2 text-sm text-text-secondary hover:bg-surface-2 transition-colors"
-              >
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
+            {auth.mode === 'oidc' ? (
+              <>
+                <label className="mb-1 block text-sm text-text-secondary">Signed in as</label>
+                <div className="space-y-1">
+                  <div className="text-base font-medium text-text-primary">{auth.displayName}</div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 truncate rounded-lg bg-surface-2 px-3 py-2 font-mono text-xs text-text-muted">
+                      {auth.userId}
+                    </code>
+                    <button
+                      onClick={handleCopy}
+                      className="rounded-lg border border-border px-3 py-2 text-sm text-text-secondary hover:bg-surface-2 transition-colors"
+                    >
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+                {auth.user?.profile?.email && (
+                  <div className="mt-2 text-sm text-text-secondary">{auth.user.profile.email as string}</div>
+                )}
+              </>
+            ) : (
+              <>
+                <label className="mb-1 block text-sm text-text-secondary">Your ID</label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 truncate rounded-lg bg-surface-2 px-3 py-2 font-mono text-xs text-text-primary">
+                    {auth.userId}
+                  </code>
+                  <button
+                    onClick={handleCopy}
+                    className="rounded-lg border border-border px-3 py-2 text-sm text-text-secondary hover:bg-surface-2 transition-colors"
+                  >
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           {/* QR Code display */}
@@ -193,7 +195,7 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
               </div>
               <button
                 onClick={stopCamera}
-                className="mt-2 w-full rounded-lg border border-border px-4 py-2 text-sm text-text-secondary hover:bg-surface-2 transition-colors"
+                className="mt-2 w-full rounded-lg border border-border px-4 py-2 text-sm text-text-secondary hover:bg-surface-2"
               >
                 Stop scanning
               </button>
@@ -221,6 +223,20 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
               Upload QR Image
             </button>
           </div>
+
+          {/* Logout button for OIDC mode */}
+          {auth.mode === 'oidc' && (
+            <button
+              onClick={() => {
+                auth.logout();
+                onClose();
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-status-error/30 px-4 py-2 text-sm text-status-error hover:bg-status-error/10 transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign Out
+            </button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

@@ -1,21 +1,21 @@
 import { cn } from '../lib/utils';
 import { ThemeToggle } from '../../components/ui/theme-toggle';
-import { ChevronLeft, LayoutGrid, UserPlus, KeyRound } from 'lucide-react';
+import { ChevronLeft, LayoutGrid, User, LogOut } from 'lucide-react';
 
 interface NavbarProps {
   onIdentityClick: () => void;
-  onTokenClick: () => void;
-  activeTokenLabel?: string | null;
+  displayName?: string;
   sessionTitle?: string;
   onBack?: () => void;
+  onLogout?: () => void;
 }
 
-export function Navbar({ onIdentityClick, onTokenClick, activeTokenLabel, sessionTitle, onBack }: NavbarProps) {
+export function Navbar({ onIdentityClick, displayName, sessionTitle, onBack, onLogout }: NavbarProps) {
   return (
     <nav className="sticky top-0 z-40 border-b border-border bg-surface-1/80 backdrop-blur-md">
       <div className="mx-auto flex h-11 sm:h-12 max-w-5xl items-center justify-between px-3 sm:px-4">
         {sessionTitle ? (
-          /* Session 页面 — 返回按钮 + agent 名 */
+          /* Session page — back button + agent name */
           <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
@@ -32,7 +32,7 @@ export function Navbar({ onIdentityClick, onTokenClick, activeTokenLabel, sessio
             </span>
           </div>
         ) : (
-          /* Dashboard 页面 — 品牌 */
+          /* Dashboard page — brand */
           <a
             href="/code/"
             className="flex items-center gap-2 font-display text-lg font-semibold text-text-primary no-underline"
@@ -55,27 +55,39 @@ export function Navbar({ onIdentityClick, onTokenClick, activeTokenLabel, sessio
             </a>
           )}
           <ThemeToggle />
-          <button
-            onClick={onTokenClick}
-            className={cn(
-              'flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-sm transition-colors',
-              activeTokenLabel
-                ? 'bg-brand/10 text-brand hover:bg-brand/20'
-                : 'text-text-secondary hover:bg-surface-2 hover:text-text-primary',
-            )}
-            title="Token Manager"
-          >
-            <KeyRound className="h-4 w-4" />
-            <span className="hidden sm:inline max-w-24 truncate">{activeTokenLabel || 'No Token'}</span>
-          </button>
-          <button
-            onClick={onIdentityClick}
-            className="flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors"
-            title="Identity & QR"
-          >
-            <UserPlus className="h-4 w-4" />
-            <span className="hidden sm:inline">Identity</span>
-          </button>
+          {displayName ? (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={onIdentityClick}
+                className={cn(
+                  'flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-sm transition-colors',
+                  'bg-brand/10 text-brand hover:bg-brand/20',
+                )}
+                title="User Profile"
+              >
+                <User className="h-4 w-4" />
+                <span className="hidden sm:inline max-w-24 truncate">{displayName}</span>
+              </button>
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  className="flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-text-muted hover:bg-surface-2 hover:text-text-secondary transition-colors"
+                  title="Sign Out"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={onIdentityClick}
+              className="flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors"
+              title="Identity"
+            >
+              <User className="h-4 w-4" />
+              <span className="hidden sm:inline">Identity</span>
+            </button>
+          )}
         </div>
       </div>
     </nav>

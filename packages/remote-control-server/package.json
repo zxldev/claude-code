@@ -43,7 +43,9 @@
     "shiki": "^3.17.0",
     "streamdown": "^1.6.8",
     "tailwind-merge": "^3.3.1",
-    "use-stick-to-bottom": "^1.1.1"
+    "use-stick-to-bottom": "^1.1.1",
+    "oidc-client-ts": "^3.0.0",
+    "jose": "^6.0.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

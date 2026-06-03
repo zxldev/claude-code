@@ -1,6 +1,6 @@
 import { ACPClient } from './client'
 import type { ACPSettings } from './types'
-import { getActiveApiToken } from '../api/client'
+import { getUserId } from '../api/client'
 
 /**
  * Build the RCS relay WebSocket URL for a given agent.
@@ -18,9 +18,9 @@ export function buildRelayUrl(agentId: string): string {
  */
 export function createRelayClient(agentId: string): ACPClient {
   const relayUrl = buildRelayUrl(agentId)
-  const token = getActiveApiToken()
-  const settings: ACPSettings = token
-    ? { proxyUrl: relayUrl, token }
+  const userId = getUserId()
+  const settings: ACPSettings = userId
+    ? { proxyUrl: relayUrl, token: userId }
     : { proxyUrl: relayUrl }
   return new ACPClient(settings)
 }

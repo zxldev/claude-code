@@ -4,32 +4,29 @@ import type {
   ControlResponse,
   SessionEvent,
 } from '../types'
-import { generateMessageUuid } from '../lib/utils'
 
 const BASE = ''
 
-export function getUuid(): string {
-  let uuid = localStorage.getItem('rcs_uuid')
-  if (!uuid) {
-    uuid = generateMessageUuid()
-    localStorage.setItem('rcs_uuid', uuid)
-  }
-  return uuid
+/** Active access token for Authorization header (set by auth context) */
+let _accessToken: string | null = null
+
+/** Active user ID for ownership queries (OIDC sub or UUID) */
+let _userId: string | null = null
+
+export function setAccessToken(token: string | null): void {
+  _accessToken = token
 }
 
-export function setUuid(uuid: string): void {
-  localStorage.setItem('rcs_uuid', uuid)
+export function getAccessToken(): string | null {
+  return _accessToken
 }
 
-/** Active API token for Authorization header (set by useTokens) */
-let _activeToken: string | null = null
-
-export function setActiveApiToken(token: string | null): void {
-  _activeToken = token
+export function setUserId(id: string | null): void {
+  _userId = id
 }
 
-export function getActiveApiToken(): string | null {
-  return _activeToken
+export function getUserId(): string | null {
+  return _userId
 }
 
 async function api<T>(
@@ -39,13 +36,14 @@ async function api<T>(
 ): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
 
-  if (_activeToken) {
-    headers['Authorization'] = `Bearer ${_activeToken}`
+  if (_accessToken) {
+    headers['Authorization'] = `Bearer ${_accessToken}`
   }
 
-  const uuid = getUuid()
+  // Append userId as uuid query param for ownership resolution
   const sep = path.includes('?') ? '&' : '?'
-  const url = `${BASE}${path}${sep}uuid=${encodeURIComponent(uuid)}`
+  const userIdParam = _userId ? `${sep}uuid=${encodeURIComponent(_userId)}` : ''
+  const url = `${BASE}${path}${userIdParam}`
   const opts: RequestInit = { method, headers }
   if (body !== undefined) opts.body = JSON.stringify(body)
 
@@ -59,7 +57,7 @@ async function api<T>(
 }
 
 export function apiBind(sessionId: string) {
-  return api<void>('POST', '/web/bind', { sessionId })
+  return api<void>('POST', '/web/auth/bind', { sessionId })
 }
 
 export function apiFetchSessions() {

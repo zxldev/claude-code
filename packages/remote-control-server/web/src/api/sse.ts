@@ -1,4 +1,4 @@
-import { getUuid } from './client'
+import { getUserId, getAccessToken } from './client'
 import type { SessionEvent } from '../types'
 
 let currentEventSource: EventSource | null = null
@@ -10,8 +10,12 @@ export function connectSSE(
 ): void {
   disconnectSSE()
 
-  const uuid = getUuid()
-  const url = `/web/sessions/${sessionId}/events?uuid=${encodeURIComponent(uuid)}`
+  const uuid = getUserId()
+  const token = getAccessToken()
+  let url = `/web/sessions/${sessionId}/events?uuid=${encodeURIComponent(uuid ?? '')}`
+  if (token) {
+    url += `&access_token=${encodeURIComponent(token)}`
+  }
   const es = new EventSource(url)
   currentEventSource = es
 

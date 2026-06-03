@@ -106,6 +106,11 @@ docker compose up -d
 | `RCS_DISCONNECT_TIMEOUT` | 否 | `300` | 断线判定超时（秒） |
 | `RCS_WS_IDLE_TIMEOUT` | 否 | `30` | WebSocket 空闲超时（秒），Bun 发送协议级 ping |
 | `RCS_WS_KEEPALIVE_INTERVAL` | 否 | `20` | 服务端→客户端 keep_alive 帧间隔（秒），防止反向代理关闭空闲连接 |
+| `RCS_OIDC_ISSUER` | 否 | _(空)_ | OIDC Provider 的 Issuer URL（如 `https://accounts.google.com`）。设置此变量和 `RCS_OIDC_CLIENT_ID` 即启用 Web UI OIDC 认证 |
+| `RCS_OIDC_CLIENT_ID` | 否 | _(空)_ | OIDC 应用的 Client ID，需在 OIDC Provider 中注册 `redirect_uri` 为 `${RCS_BASE_URL}/code/auth/callback` |
+| `RCS_OIDC_AUDIENCE` | 否 | _(空)_ | OIDC Audience（aud 声明验证），部分 Provider 需要设置 |
+| `RCS_OIDC_JWKS_URI` | 否 | _(自动)_ | JWKS 端点 URL。默认从 `${RCS_OIDC_ISSUER}/.well-known/jwks.json` 自动发现 |
+| `RCS_OIDC_SCOPES` | 否 | `openid profile email` | OIDC 授权范围，空格分隔 |
 
 ### 客户端（Claude Code CLI）
 
@@ -202,7 +207,50 @@ Web UI 已从原生 JS 重构为 **React + Vite + Radix UI**：
 - Plan 可视化（进度条、状态图标、优先级标签）
 - ACP QR 扫描自动跳转到 ACP 聊天界面
 
-Web UI 使用 UUID 认证（无需用户账户），适合受信任网络环境。
+Web UI 使用 UUID 认证（无需用户账户），适合受信任网络环境。也支持 OIDC 认证，适合需要用户身份验证的企业部署。
+
+### Web UI OIDC 认证
+
+当配置了 `RCS_OIDC_ISSUER` 和 `RCS_OIDC_CLIENT_ID` 时，Web UI 自动切换为 OIDC 认证模式。未配置时回退为 UUID 认证。
+
+**支持的 OIDC Provider**：Google Identity、Okta、Keycloak、Auth0、Azure AD 等标准 OIDC 兼容 Provider。
+
+#### 配置步骤
+
+1. 在 OIDC Provider 中创建应用，回调地址注册为：
+   - **Redirect URI**: `${RCS_BASE_URL}/code/auth/callback`
+   - **Post Logout URI**: `${RCS_BASE_URL}/code/`
+   - **Silent Renew URI**: `${RCS_BASE_URL}/code/auth/silent-renew.html`
+
+2. 在 RCS 环境变量中设置 OIDC 配置：
+
+```bash
+RCS_OIDC_ISSUER=https://your-oidc-provider.com
+RCS_OIDC_CLIENT_ID=your-client-id
+# 可选：
+RCS_OIDC_AUDIENCE=your-audience
+RCS_OIDC_SCOPES="openid profile email"
+```
+
+3. 启动 RCS 后，Web UI 会自动显示登录页面，而非 UUID 面板。
+
+#### 认证流程
+
+```
+浏览器 ──► 点击 Sign In ──► OIDC Provider 登录页
+                                      │
+                               登录成功，回调
+                                      │
+浏览器 ◄── /code/auth/callback ◄──────┘
+    │
+    ├── oidc-client-ts 处理回调
+    ├── 存储 access_token / id_token
+    └── 跳转到 /code/ 主页面
+```
+
+- **Token 自动刷新**：通过 silent renew iframe 自动续期，无需用户重新登录
+- **API 请求认证**：前端自动在 API 请求中附加 `Authorization: Bearer <access_token>`，服务端使用 `jose` 库通过 JWKS 验证 JWT
+- **CLI 认证不受影响**：CLI 仍使用 API Key 认证，两种认证方式共存
 
 ## ACP 支持
 
@@ -341,7 +389,7 @@ curl https://rcs.example.com/health
 | 扩展 | 不支持水平扩展（无共享状态），单实例部署 |
 | 并发 | 适合中小规模使用，大量并发会话可能需要性能调优 |
 | 数据持久化 | `/app/data` 卷已预留但当前未使用，未来可能用于持久化 |
-| Web UI 认证 | 基于 UUID，无用户账户系统，适合受信任网络环境 |
+| Web UI 认证 | 默认 UUID（无用户账户）；可选 OIDC JWT 认证（需配置 `RCS_OIDC_ISSUER` + `RCS_OIDC_CLIENT_ID`） |
 
 ## 与云端模式对比
 

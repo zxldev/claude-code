@@ -12,17 +12,26 @@ export const config = {
     .split(',')
     .map(origin => origin.trim())
     .filter(Boolean),
-  /** Bun WebSocket idle timeout (seconds). Bun sends protocol-level pings after
-   *  this many seconds of no received data. Must be shorter than any reverse
-   *  proxy's idle timeout (nginx default 60s, Cloudflare 100s). Default 30s. */
   wsIdleTimeout: parseInt(process.env.RCS_WS_IDLE_TIMEOUT || '30', 10),
-  /** Server→client keep_alive data-frame interval (seconds). Keeps reverse
-   *  proxies from closing idle connections. Default 20s. */
   wsKeepaliveInterval: parseInt(
     process.env.RCS_WS_KEEPALIVE_INTERVAL || '20',
     10,
   ),
+  /** OIDC configuration for Web UI authentication */
+  oidc: {
+    issuer: process.env.RCS_OIDC_ISSUER || '',
+    clientId: process.env.RCS_OIDC_CLIENT_ID || '',
+    audience: process.env.RCS_OIDC_AUDIENCE || '',
+    jwksUri: process.env.RCS_OIDC_JWKS_URI || '',
+    scopes: (process.env.RCS_OIDC_SCOPES || 'openid profile email')
+      .split(' ')
+      .filter(Boolean),
+  },
 } as const
+
+export function isOidcConfigured(): boolean {
+  return !!(config.oidc.issuer && config.oidc.clientId)
+}
 
 export function getBaseUrl(): string {
   const url = config.baseUrl || `http://localhost:${config.port}`

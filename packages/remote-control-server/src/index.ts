@@ -69,6 +69,8 @@ app.use(
 app.get('/code', serveStatic({ root: webDir, path: 'index.html' }))
 app.get('/code/', serveStatic({ root: webDir, path: 'index.html' }))
 app.get('/code/:sessionId', serveStatic({ root: webDir, path: 'index.html' }))
+// /code/auth/* — OIDC callback SPA fallback
+app.get('/code/auth/*', serveStatic({ root: webDir, path: 'index.html' }))
 
 // v1 Environment routes
 app.route('/v1/environments', v1Environments)
@@ -89,7 +91,7 @@ app.route('/v1/code/sessions', v2WorkerEventsStream)
 app.route('/v1/code/sessions', v2WorkerEvents)
 
 // Web control panel routes
-app.route('/web', webAuth)
+app.route('/web/auth', webAuth)
 app.route('/web', webSessions)
 app.route('/web', webControl)
 app.route('/web', webEnvironments)

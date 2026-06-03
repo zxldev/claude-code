@@ -1,51 +1,31 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Navbar } from './components/Navbar';
 import { IdentityPanel } from './components/IdentityPanel';
-import { TokenManagerDialog } from './components/TokenManagerDialog';
 import { ThemeProvider } from './lib/theme';
-import { getUuid, setUuid, apiBind, setActiveApiToken } from './api/client';
+import { setAccessToken, setUserId, apiBind } from './api/client';
 import { ACPDirectView } from './components/ACPDirectView';
-import { useTokens } from './hooks/useTokens';
+import { AuthProvider, useAuth } from './auth/context';
+import { useAuthProvider } from './auth/useAuth';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
 const SessionDetail = lazy(() => import('./pages/SessionDetail').then(m => ({ default: m.SessionDetail })));
 
-export default function App() {
+function AppContent() {
+  const auth = useAuth();
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [identityOpen, setIdentityOpen] = useState(false);
-  const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
   const [acpDirect, setAcpDirect] = useState<{ url: string; token: string } | null>(null);
-  const { tokens, activeTokenId, activeLabel, activeTokenValue, setActiveTokenId, addToken, removeToken, updateToken } =
-    useTokens();
 
-  // Sync active token to API client
+  // Sync auth state to API client
   useEffect(() => {
-    setActiveApiToken(activeTokenValue);
-  }, [activeTokenValue]);
-
-  const handleSetActiveToken = useCallback(
-    (id: string) => {
-      setActiveTokenId(id);
-    },
-    [setActiveTokenId],
-  );
+    setAccessToken(auth.accessToken);
+    setUserId(auth.userId);
+  }, [auth.accessToken, auth.userId]);
 
   // Simple hash-based router
   const parseRoute = useCallback(() => {
-    // Ensure UUID exists
-    getUuid();
-
     const path = window.location.pathname;
-
-    // Check for UUID import from QR scan (?uuid=xxx)
     const params = new URLSearchParams(window.location.search);
-    const importUuid = params.get('uuid');
-    if (importUuid) {
-      setUuid(importUuid);
-      const url = new URL(window.location.href);
-      url.searchParams.delete('uuid');
-      window.history.replaceState(null, '', url);
-    }
 
     // Check for ACP direct connection (?acp=1)
     const acpParam = params.get('acp');
@@ -57,7 +37,6 @@ export default function App() {
           if (acpData.url && acpData.token) {
             setAcpDirect({ url: acpData.url, token: acpData.token });
             sessionStorage.removeItem('acp_connection');
-            // Clean URL
             const url = new URL(window.location.href);
             url.searchParams.delete('acp');
             window.history.replaceState(null, '', url);
@@ -69,14 +48,13 @@ export default function App() {
       }
     }
 
-    // Check for CLI session bind (?sid=xxx) — bind session to current UUID
+    // Check for CLI session bind (?sid=xxx)
     const sid = params.get('sid');
     if (sid) {
       const url = new URL(window.location.href);
       url.searchParams.delete('sid');
       window.history.replaceState(null, '', `/code/${sid}`);
       setCurrentSessionId(sid);
-      // Bind this session to the current user's UUID for ownership
       apiBind(sid).catch((err: unknown) => {
         console.warn('Failed to bind session:', err);
       });
@@ -109,15 +87,62 @@ export default function App() {
     setAcpDirect(null);
   }, []);
 
+  // Auto-redirect to OIDC login when not authenticated
+  useEffect(() => {
+    if (auth.mode === 'oidc' && !auth.isAuthenticated && !auth.isLoading && !auth.error) {
+      auth.login();
+    }
+  }, [auth.mode, auth.isAuthenticated, auth.isLoading, auth.error, auth.login]);
+
+  // Loading state
+  if (auth.isLoading) {
+    return (
+      <ThemeProvider defaultTheme="system">
+        <div className="flex h-screen items-center justify-center bg-surface-0">
+          <div className="animate-spin h-8 w-8 border-2 border-brand border-t-transparent rounded-full" />
+        </div>
+      </ThemeProvider>
+    );
+  }
+
+  // OIDC guard: block Dashboard rendering until authenticated
+  if (auth.mode === 'oidc' && !auth.isAuthenticated) {
+    return (
+      <ThemeProvider defaultTheme="system">
+        <div className="flex h-screen items-center justify-center bg-surface-0">
+          <div className="text-center space-y-4">
+            <svg width="40" height="40" viewBox="0 0 20 20" fill="none" aria-hidden="true" className="mx-auto">
+              <path d="M10 1L12.2 7.8L19 10L12.2 12.2L10 19L7.8 12.2L1 10L7.8 7.8L10 1Z" fill="var(--color-brand)" />
+            </svg>
+            <h1 className="font-display text-2xl font-semibold text-text-primary">Remote Control</h1>
+            {auth.error ? (
+              <>
+                <p className="text-red-500 text-sm max-w-md">Authentication error: {auth.error}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="rounded-lg bg-brand px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-light transition-colors"
+                >
+                  Retry
+                </button>
+              </>
+            ) : (
+              <p className="text-text-muted text-sm">Redirecting to login...</p>
+            )}
+          </div>
+        </div>
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider defaultTheme="system">
       <div className="flex h-screen flex-col bg-surface-0 text-text-primary">
         <Navbar
           onIdentityClick={() => setIdentityOpen(true)}
-          onTokenClick={() => setTokenDialogOpen(true)}
-          activeTokenLabel={currentSessionId ? undefined : activeLabel}
+          displayName={auth.displayName || undefined}
           sessionTitle={currentSessionId || (acpDirect ? 'ACP' : undefined)}
           onBack={currentSessionId || acpDirect ? navigateToDashboard : undefined}
+          onLogout={auth.mode === 'oidc' ? auth.logout : undefined}
         />
 
         <Suspense fallback={<div className="flex flex-1 items-center justify-center text-text-muted">Loading...</div>}>
@@ -133,18 +158,16 @@ export default function App() {
         </Suspense>
 
         <IdentityPanel open={identityOpen} onClose={() => setIdentityOpen(false)} />
-
-        <TokenManagerDialog
-          open={tokenDialogOpen}
-          onClose={() => setTokenDialogOpen(false)}
-          tokens={tokens}
-          activeTokenId={activeTokenId}
-          onSetActive={handleSetActiveToken}
-          onAdd={addToken}
-          onRemove={removeToken}
-          onUpdate={updateToken}
-        />
       </div>
     </ThemeProvider>
+  );
+}
+
+export default function App() {
+  const authValue = useAuthProvider();
+  return (
+    <AuthProvider value={authValue}>
+      <AppContent />
+    </AuthProvider>
   );
 }

@@ -2,9 +2,28 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
+import { copyFileSync } from 'node:fs'
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    {
+      name: 'copy-oidc-client',
+      closeBundle() {
+        const src = path.resolve(
+          __dirname,
+          '../node_modules/oidc-client-ts/dist/browser/oidc-client-ts.min.js',
+        )
+        const dest = path.resolve(__dirname, 'dist/auth/oidc-client-ts.min.js')
+        try {
+          copyFileSync(src, dest)
+        } catch {
+          // OIDC bundle may not exist if dependency is not installed
+        }
+      },
+    },
+  ],
   base: '/code/',
   resolve: {
     alias: {

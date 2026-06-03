@@ -18,6 +18,12 @@ const mockConfig = {
 mock.module('../config', () => ({
   config: mockConfig,
   getBaseUrl: () => 'http://localhost:3000',
+  isOidcConfigured: () => false,
+}))
+
+mock.module('../auth/oidc-jwt', () => ({
+  verifyOidcJwt: async () => null,
+  getDisplayName: () => '',
 }))
 
 import { Hono } from 'hono'
@@ -28,8 +34,8 @@ import {
   encodeWebSocketAuthProtocol,
   extractWebSocketAuthToken,
   sessionIngressAuth,
-  uuidAuth,
-  getUuidFromRequest,
+  oidcAuth,
+  getAuthDisplayName,
 } from '../auth/middleware'
 import { issueToken } from '../auth/token'
 import { generateWorkerJwt } from '../auth/jwt'
@@ -53,14 +59,14 @@ function createTestApp() {
     return c.json({ ok: true, jwtPayload: c.get('jwtPayload') || null })
   })
 
-  // Test route for uuidAuth
-  app.get('/uuid-test', uuidAuth, c => {
+  // Test route for oidcAuth
+  app.get('/uuid-test', oidcAuth, c => {
     return c.json({ uuid: c.get('uuid') })
   })
 
-  // Test route for getUuidFromRequest
-  app.get('/uuid-extract', c => {
-    return c.json({ uuid: getUuidFromRequest(c) })
+  // Test route for getAuthDisplayName (with oidcAuth middleware to set context)
+  app.get('/uuid-extract', oidcAuth, c => {
+    return c.json({ displayName: getAuthDisplayName(c) })
   })
 
   app.get('/ws-auth-token', c => {
@@ -206,7 +212,7 @@ describe('Auth Middleware', () => {
     })
   })
 
-  describe('uuidAuth', () => {
+  describe('oidcAuth', () => {
     test('accepts UUID from query param', async () => {
       const res = await app.request('/uuid-test?uuid=test-uuid-1')
       expect(res.status).toBe(200)
@@ -223,31 +229,26 @@ describe('Auth Middleware', () => {
       expect(body.uuid).toBe('test-uuid-2')
     })
 
-    test('rejects missing UUID', async () => {
+    test('accepts API key via Authorization header', async () => {
+      const res = await app.request('/uuid-test', {
+        headers: { Authorization: 'Bearer test-api-key' },
+      })
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.uuid).toBe('test-api-key')
+    })
+
+    test('rejects missing auth', async () => {
       const res = await app.request('/uuid-test')
       expect(res.status).toBe(401)
     })
   })
 
-  describe('getUuidFromRequest', () => {
-    test('extracts from query param', async () => {
-      const res = await app.request('/uuid-extract?uuid=from-query')
+  describe('getAuthDisplayName', () => {
+    test('returns displayName from oidcAuth context', async () => {
+      const res = await app.request('/uuid-extract?uuid=some-user')
       const body = await res.json()
-      expect(body.uuid).toBe('from-query')
-    })
-
-    test('extracts from header', async () => {
-      const res = await app.request('/uuid-extract', {
-        headers: { 'X-UUID': 'from-header' },
-      })
-      const body = await res.json()
-      expect(body.uuid).toBe('from-header')
-    })
-
-    test('returns undefined when no UUID', async () => {
-      const res = await app.request('/uuid-extract')
-      const body = await res.json()
-      expect(body.uuid).toBeUndefined()
+      expect(body.displayName).toBe('some-user')
     })
   })
 })

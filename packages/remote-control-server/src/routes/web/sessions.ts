@@ -1,6 +1,6 @@
 import { log, error as logError } from '../../logger'
 import { Hono } from 'hono'
-import { uuidAuth } from '../../auth/middleware'
+import { oidcAuth } from '../../auth/middleware'
 import { getAutomationStateSnapshot } from '../../services/automationState'
 import {
   createSession,
@@ -19,7 +19,7 @@ import { getEventBus } from '../../transport/event-bus'
 const app = new Hono()
 
 /** POST /web/sessions — Create a session from web UI */
-app.post('/sessions', uuidAuth, async c => {
+app.post('/sessions', oidcAuth, async c => {
   const uuid = c.get('uuid')!
   const body = await c.req.json()
   const session = createSession({
@@ -45,23 +45,28 @@ app.post('/sessions', uuidAuth, async c => {
 })
 
 /** GET /web/sessions — List sessions owned by the requesting UUID */
-app.get('/sessions', uuidAuth, async c => {
+app.get('/sessions', oidcAuth, async c => {
   const uuid = c.get('uuid')!
   const sessions = listWebSessionsByOwnerUuid(uuid)
   return c.json(sessions, 200)
 })
 
 /** GET /web/sessions/all — List sessions owned by the requesting UUID (unowned sessions excluded) */
-app.get('/sessions/all', uuidAuth, async c => {
+app.get('/sessions/all', oidcAuth, async c => {
   const uuid = c.get('uuid')!
   const sessions = listWebSessionSummariesByOwnerUuid(uuid)
   return c.json(sessions, 200)
 })
 
 /** GET /web/sessions/:id — Session detail */
-app.get('/sessions/:id', uuidAuth, async c => {
+app.get('/sessions/:id', oidcAuth, async c => {
   const uuid = c.get('uuid')!
-  const sessionId = resolveOwnedWebSessionId(c.req.param('id')!, uuid)
+  const autoClaim = !!c.get('oidcClaims')
+  const sessionId = resolveOwnedWebSessionId(
+    c.req.param('id')!,
+    uuid,
+    autoClaim,
+  )
   if (!sessionId) {
     return c.json(
       { error: { type: 'forbidden', message: 'Not your session' } },
@@ -87,9 +92,14 @@ app.get('/sessions/:id', uuidAuth, async c => {
 })
 
 /** GET /web/sessions/:id/history — Historical events for session */
-app.get('/sessions/:id/history', uuidAuth, async c => {
+app.get('/sessions/:id/history', oidcAuth, async c => {
   const uuid = c.get('uuid')!
-  const sessionId = resolveOwnedWebSessionId(c.req.param('id')!, uuid)
+  const autoClaim = !!c.get('oidcClaims')
+  const sessionId = resolveOwnedWebSessionId(
+    c.req.param('id')!,
+    uuid,
+    autoClaim,
+  )
   if (!sessionId) {
     return c.json(
       { error: { type: 'forbidden', message: 'Not your session' } },
@@ -110,9 +120,14 @@ app.get('/sessions/:id/history', uuidAuth, async c => {
 })
 
 /** SSE /web/sessions/:id/events — Real-time event stream */
-app.get('/sessions/:id/events', uuidAuth, async c => {
+app.get('/sessions/:id/events', oidcAuth, async c => {
   const uuid = c.get('uuid')!
-  const sessionId = resolveOwnedWebSessionId(c.req.param('id')!, uuid)
+  const autoClaim = !!c.get('oidcClaims')
+  const sessionId = resolveOwnedWebSessionId(
+    c.req.param('id')!,
+    uuid,
+    autoClaim,
+  )
   if (!sessionId) {
     return c.json(
       { error: { type: 'forbidden', message: 'Not your session' } },
